@@ -32,7 +32,7 @@ async fn main() {
         .route("/ws", get(ws_handler))
         .with_state(app_state);
 
-    let addr: SocketAddr = "127.0.0.1:3001".parse().unwrap();
+    let addr: SocketAddr = "192.168.1.48:3001".parse().unwrap();
     info!("starting websocket server on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

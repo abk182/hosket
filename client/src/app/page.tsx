@@ -17,7 +17,7 @@ export default function Home() {
 
   const wsUrl = useMemo(() => {
     const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-    const host = "localhost:3001";
+    const host = "192.168.1.48:3001";
     return `${isHttps ? "wss" : "ws"}://${host}/ws`;
   }, []);
 
