@@ -2,12 +2,10 @@
 
 import { getWsUrl } from "@/app/_utils/ws-url";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getRandomHexColor } from "./hex";
 
 const wsUrl = getWsUrl("canvas");
-
-type Input = { x?: number; y?: number; color?: string };
 
 export default function Canvas({ username }: { username: string }) {
   const [connected, setConnected] = useState(false);
@@ -16,62 +14,105 @@ export default function Canvas({ username }: { username: string }) {
   const wsRef = useRef<WebSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const inputRef = useRef<{
-    [user: string]: Input;
-  }>({ [username]: {} });
+    [user: string]: Array<Step>;
+  }>({});
 
-  const draw = useCallback(({ x, y, color }: Input) => {
+  const drawStep = ({ coords, color }: Step) => {
     const canvas = canvasRef.current;
 
-    if (!canvas || !x || !y || !color) return;
+    if (!canvas || !coords || !color) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Clear the canvas
-    // ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = color;
 
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, 2 * Math.PI);
-    ctx.fill();
-  }, []);
+    for (let i = 0; i < coords.length - 4; i += 2) {
+      const start = { x: coords[i], y: coords[i + 1] };
+      const end = { x: coords[i + 2], y: coords[i + 3] };
 
-  const sendPosition = useCallback(
-    (x: number, y: number) => {
-      const color = inputRef.current[username]?.color || getRandomHexColor();
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    }
+  };
 
-      const payload: WsMessage = {
-        user: username,
-        text: `{"x": ${x}, "y": ${y}, "color": "${color}"}`,
-      };
-      wsRef.current?.send(JSON.stringify(payload));
-      inputRef.current = {
-        ...inputRef.current,
-        [username]: {
-          x,
-          y,
-          color,
-        },
-      };
-      draw(inputRef.current[username]);
-    },
-    [username]
-  );
+  const draw = () => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    console.log(inputRef.current);
+
+    Object.keys(inputRef.current).forEach((user) => {
+      inputRef.current[user].forEach((step) => {
+        drawStep(step);
+      });
+    });
+  };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDrawing(true);
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    sendPosition(x, y);
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
+    let id = 0;
+    let color = getRandomHexColor();
+
+    if (inputRef.current[username] == null) {
+      inputRef.current[username] = [];
+    } else {
+      const lastStep =
+        inputRef.current[username][inputRef.current[username].length - 1];
+
+      if (lastStep?.id != null) {
+        id = lastStep.id + 1;
+        color = lastStep.color;
+      }
+    }
+
+    const newStep: Step = {
+      id,
+      coords: [x, y],
+      color,
+    };
+    inputRef.current[username].push(newStep);
+    draw();
+
+    const payload: WsMessage = {
+      user: username,
+      step: newStep,
+    };
+    wsRef.current?.send(JSON.stringify(payload));
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    sendPosition(x, y);
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
+    const lastStep =
+      inputRef.current[username][inputRef.current[username].length - 1];
+    lastStep.coords.push(x, y);
+
+    const payload: WsMessage = {
+      user: username,
+      step: {
+        id: lastStep.id,
+        coords: [x, y],
+        color: lastStep.color,
+      },
+    };
+    wsRef.current?.send(JSON.stringify(payload));
+
+    draw();
   };
 
   const handleMouseUp = () => {
@@ -94,15 +135,24 @@ export default function Canvas({ username }: { username: string }) {
       try {
         const data: WsMessage = JSON.parse(ev.data);
 
-        if (username === data.user) return;
+        if (username === data.user || data.step == null) return;
 
-        const parsed: Input = JSON.parse(data.text);
+        if (!inputRef.current[data.user]) {
+          inputRef.current[data.user] = [];
+        }
 
-        inputRef.current = { ...inputRef.current, [data.user]: parsed };
+        const lastStep =
+          inputRef.current[data.user][inputRef.current[data.user].length - 1];
 
-        draw(parsed);
+        if (lastStep?.id != null && data.step.id === lastStep.id) {
+          lastStep.coords.push(data.step.coords[0], data.step.coords[1]);
+        } else {
+          inputRef.current[data.user].push(data.step);
+        }
+
+        draw();
       } catch (e) {
-        console.log("error!", e);
+        console.error(e);
       }
     };
 

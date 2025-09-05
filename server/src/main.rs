@@ -6,16 +6,26 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::info;
+
+#[derive(Serialize, Deserialize)]
+struct Step {
+    id: i32,
+    coords: [i32; 2],
+    color: String,
+}
+
 #[derive(Serialize, Deserialize)]
 struct ChatMessage {
     user: String,
-    text: String,
+    text: Option<String>,
+    step: Option<Step>,
 }
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
+    // TODO: use separate channels for chat and canvas messages;
     let (tx, _rx) = broadcast::channel::<String>(100);
 
     let tx_chat = tx.clone();
@@ -63,7 +73,8 @@ async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<Str
                     Ok(chat) => serde_json::to_string(&chat).unwrap(),
                     Err(_) => serde_json::to_string(&ChatMessage {
                         user: "anon".to_string(),
-                        text,
+                        text: Some(text),
+                        step: None,
                     })
                     .unwrap(),
                 };
