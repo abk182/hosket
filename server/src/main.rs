@@ -29,7 +29,7 @@ async fn main() {
     let app_state = AppState { tx };
 
     let app = Router::new()
-        .route("/ws", get(ws_handler))
+        .route("/ws/chat", get(ws_handler))
         .with_state(app_state);
 
     let addr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], 3001));

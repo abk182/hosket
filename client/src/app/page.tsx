@@ -10,16 +10,22 @@ type ChatMessage = {
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [username, setUsername] = useState<string>("guest" + Math.floor(Math.random() * 1000));
+  const [username, setUsername] = useState<string>(
+    "guest" + Math.floor(Math.random() * 1000)
+  );
   const [connected, setConnected] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
   const wsUrl = useMemo(() => {
-    const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-    const defaultHost = typeof window !== "undefined" ? `${window.location.hostname}:3001` : "localhost:3001";
+    const isHttps =
+      typeof window !== "undefined" && window.location.protocol === "https:";
+    const defaultHost =
+      typeof window !== "undefined"
+        ? `${window.location.hostname}:3001`
+        : "localhost:3001";
     const host = process.env.NEXT_PUBLIC_WS_HOST || defaultHost;
-    return `${isHttps ? "wss" : "ws"}://${host}/ws`;
+    return `${isHttps ? "wss" : "ws"}://${host}/ws/chat`;
   }, []);
 
   useEffect(() => {
@@ -68,7 +74,11 @@ export default function Home() {
       <header className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">WebSocket Chat</h1>
         <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
+          <span
+            className={`h-2 w-2 rounded-full ${
+              connected ? "bg-green-500" : "bg-red-500"
+            }`}
+          />
           <input
             className="border rounded px-2 py-1 text-sm"
             value={username}
@@ -78,14 +88,18 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="border rounded p-3 overflow-y-auto bg-white/5" style={{ maxHeight: "60vh" }}>
+      <main
+        className="border rounded p-3 overflow-y-auto bg-white/5"
+        style={{ maxHeight: "60vh" }}
+      >
         {messages.length === 0 ? (
           <p className="text-sm text-gray-500">No messages yet.</p>
         ) : (
           <ul className="space-y-2">
             {messages.map((m, i) => (
               <li key={i} className="text-sm">
-                <span className="font-medium">{m.user}:</span> <span>{m.text}</span>
+                <span className="font-medium">{m.user}:</span>{" "}
+                <span>{m.text}</span>
               </li>
             ))}
           </ul>

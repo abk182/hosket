@@ -1,8 +1,13 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# logs
+client.out
+server.out
 
-# dependencies
-/node_modules
-/.pnp
+# rust deps
+server/target
+
+# js deps
+client/node_modules
+client/.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -11,14 +16,14 @@
 !.yarn/versions
 
 # testing
-/coverage
+client/coverage
 
 # next.js
-/.next/
-/out/
+client/.next/
+client/out/
 
 # production
-/build
+client/build
 
 # misc
 .DS_Store
