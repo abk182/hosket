@@ -1,32 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { getWsUrl } from "@/app/_utils/ws-url";
+import { useEffect, useRef, useState } from "react";
 
-type ChatMessage = {
-  user: string;
-  text: string;
-};
+const wsUrl = getWsUrl("chat");
 
-export default function Chat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export default function Chat({
+  username,
+  onChangeUsername,
+}: {
+  username: string;
+  onChangeUsername: (username: string) => void;
+}) {
+  const [messages, setMessages] = useState<WsMessage[]>([]);
   const [input, setInput] = useState("");
-  const [username, setUsername] = useState<string>(
-    "guest" + Math.floor(Math.random() * 1000)
-  );
   const [connected, setConnected] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-
-  const wsUrl = useMemo(() => {
-    const isHttps =
-      typeof window !== "undefined" && window.location.protocol === "https:";
-    const defaultHost =
-      typeof window !== "undefined"
-        ? `${window.location.hostname}:3001`
-        : "localhost:3001";
-    const host = process.env.NEXT_PUBLIC_WS_HOST || defaultHost;
-    return `${isHttps ? "wss" : "ws"}://${host}/ws/chat`;
-  }, []);
 
   useEffect(() => {
     const ws = new WebSocket(wsUrl);
@@ -38,7 +28,7 @@ export default function Chat() {
 
     ws.onmessage = (ev) => {
       try {
-        const data: ChatMessage = JSON.parse(ev.data);
+        const data: WsMessage = JSON.parse(ev.data);
         setMessages((prev) => [...prev, data]);
       } catch {
         // ignore
@@ -57,7 +47,7 @@ export default function Chat() {
   const sendMessage = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     if (!input.trim()) return;
-    const payload: ChatMessage = { user: username, text: input.trim() };
+    const payload: WsMessage = { user: username, text: input.trim() };
     wsRef.current.send(JSON.stringify(payload));
     setInput("");
   };
@@ -82,7 +72,7 @@ export default function Chat() {
           <input
             className="border rounded px-2 py-1 text-sm"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => onChangeUsername(e.target.value)}
             placeholder="username"
           />
         </div>
