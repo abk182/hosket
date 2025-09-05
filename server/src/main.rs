@@ -1,22 +1,11 @@
 use std::net::SocketAddr;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{Router, extract::State, response::IntoResponse, routing::get};
+use axum::{Router, routing::get};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::info;
-
-#[derive(Clone)]
-struct Chat {
-    tx: broadcast::Sender<String>,
-}
-
-#[derive(Clone)]
-struct AppState {
-    chat: Chat,
-}
-
 #[derive(Serialize, Deserialize)]
 struct ChatMessage {
     user: String,
@@ -29,11 +18,10 @@ async fn main() {
 
     let (tx, _rx) = broadcast::channel::<String>(100);
 
-    let app_state = AppState { chat: Chat { tx } };
-
-    let app = Router::new()
-        .route("/ws/chat", get(ws_handler))
-        .with_state(app_state);
+    let app = Router::new().route(
+        "/ws/chat",
+        get(async |ws: WebSocketUpgrade| ws.on_upgrade(move |socket| handle_socket(socket, tx))),
+    );
 
     let addr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], 3001));
     info!("starting websocket server on {}", addr);
@@ -42,13 +30,9 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
-}
-
-async fn handle_socket(socket: WebSocket, state: AppState) {
+async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<String>) {
     let (mut sender, mut receiver) = socket.split();
-    let mut rx = state.chat.tx.subscribe();
+    let mut rx = tx.subscribe();
 
     // Task to forward broadcast messages to this client
     let send_task = tokio::spawn(async move {
@@ -71,7 +55,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     })
                     .unwrap(),
                 };
-                let _ = state.chat.tx.send(payload);
+                let _ = tx.send(payload);
             }
             Message::Binary(_) => {}
             Message::Ping(_) => {}
