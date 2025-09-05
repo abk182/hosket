@@ -1,10 +1,9 @@
 "use client";
 
 import { getWsUrl } from "@/app/_utils/ws-url";
-import { throttle } from "lodash";
-// import throttle from "lodash/throttle";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import draw from "./draw";
 
 const wsUrl = getWsUrl("canvas");
 
@@ -15,12 +14,7 @@ export default function Canvas({ username }: { username: string }) {
 
   const wsRef = useRef<WebSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [input, setInput] = useState<{
-    [user: string]: Coordinates;
-  }>({
-    [username]: {},
-  });
-  const throttledSetInput = useCallback(throttle(setInput, 50), []);
+  const inputRef = useRef<{ [user: string]: Coordinates }>({ [username]: {} });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -31,11 +25,13 @@ export default function Canvas({ username }: { username: string }) {
       text: `{"x": ${x}, "y": ${y}}`,
     };
     wsRef.current?.send(JSON.stringify(payload));
-    throttledSetInput((prev) => ({ ...prev, [username]: { x, y } }));
+    inputRef.current = { ...inputRef.current, [username]: { x, y } };
+    draw(canvasRef.current, inputRef.current);
   };
 
   const handleMouseLeave = () => {
-    throttledSetInput((prev) => ({ ...prev, [username]: {} }));
+    inputRef.current = { ...inputRef.current, [username]: {} };
+    draw(canvasRef.current, inputRef.current);
   };
 
   useEffect(() => {
@@ -54,7 +50,9 @@ export default function Canvas({ username }: { username: string }) {
 
         const parsedCoords: Coordinates = JSON.parse(data.text);
 
-        throttledSetInput((prev) => ({ ...prev, [data.user]: parsedCoords }));
+        inputRef.current = { ...inputRef.current, [username]: parsedCoords };
+
+        draw(canvasRef.current, inputRef.current);
       } catch (e) {
         console.log("error!", e);
         // ignore
@@ -70,30 +68,6 @@ export default function Canvas({ username }: { username: string }) {
     };
   }, [wsUrl]);
 
-  useEffect(() => {
-    console.log(input);
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    Object.keys(input).forEach((key) => {
-      const { x, y } = input[key];
-
-      if (x && y) {
-        ctx.fillStyle = "#ef4444"; // red-500
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    });
-  }, [input]);
-
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr_auto] gap-4 p-4 max-w-2xl mx-auto">
       <main className="border rounded p-3 overflow-y-auto bg-white/5">
@@ -103,14 +77,6 @@ export default function Canvas({ username }: { username: string }) {
           onMouseLeave={handleMouseLeave}
         />
       </main>
-      <div>
-        {connected &&
-          Object.keys(input).map((key) => (
-            <div key={key} className="mt-2 text-sm">
-              {`${key}: x - ${input[key].x} y - ${input[key].y}`}
-            </div>
-          ))}
-      </div>
     </div>
   );
 }
