@@ -1,15 +1,20 @@
 use std::net::SocketAddr;
 
-use axum::{extract::State, response::IntoResponse, routing::get, Router};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::{Router, extract::State, response::IntoResponse, routing::get};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::info;
 
 #[derive(Clone)]
-struct AppState {
+struct Chat {
     tx: broadcast::Sender<String>,
+}
+
+#[derive(Clone)]
+struct AppState {
+    chat: Chat,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,13 +25,11 @@ struct ChatMessage {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     let (tx, _rx) = broadcast::channel::<String>(100);
 
-    let app_state = AppState { tx };
+    let app_state = AppState { chat: Chat { tx } };
 
     let app = Router::new()
         .route("/ws/chat", get(ws_handler))
@@ -45,7 +48,7 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
-    let mut rx = state.tx.subscribe();
+    let mut rx = state.chat.tx.subscribe();
 
     // Task to forward broadcast messages to this client
     let send_task = tokio::spawn(async move {
@@ -62,9 +65,13 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             Message::Text(text) => {
                 let payload = match serde_json::from_str::<ChatMessage>(&text) {
                     Ok(chat) => serde_json::to_string(&chat).unwrap(),
-                    Err(_) => serde_json::to_string(&ChatMessage { user: "anon".to_string(), text }).unwrap(),
+                    Err(_) => serde_json::to_string(&ChatMessage {
+                        user: "anon".to_string(),
+                        text,
+                    })
+                    .unwrap(),
                 };
-                let _ = state.tx.send(payload);
+                let _ = state.chat.tx.send(payload);
             }
             Message::Binary(_) => {}
             Message::Ping(_) => {}
