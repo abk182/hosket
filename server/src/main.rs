@@ -18,10 +18,22 @@ async fn main() {
 
     let (tx, _rx) = broadcast::channel::<String>(100);
 
-    let app = Router::new().route(
-        "/ws/chat",
-        get(async |ws: WebSocketUpgrade| ws.on_upgrade(move |socket| handle_socket(socket, tx))),
-    );
+    let tx_chat = tx.clone();
+    let tx_canvas = tx.clone();
+
+    let app = Router::new()
+        .route(
+            "/ws/chat",
+            get(async |ws: WebSocketUpgrade| {
+                ws.on_upgrade(move |socket| handle_socket(socket, tx_chat))
+            }),
+        )
+        .route(
+            "/ws/canvas",
+            get(async |ws: WebSocketUpgrade| {
+                ws.on_upgrade(move |socket| handle_socket(socket, tx_canvas))
+            }),
+        );
 
     let addr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], 3001));
     info!("starting websocket server on {}", addr);
