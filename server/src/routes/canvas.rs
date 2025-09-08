@@ -12,7 +12,7 @@ struct Step {
 }
 
 #[derive(Serialize, Deserialize)]
-struct ChatMessage {
+struct WsMessage {
     user: String,
     step: Option<Step>,
 }
@@ -45,9 +45,9 @@ async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<Str
     while let Some(Ok(msg)) = receiver.next().await {
         match msg {
             Message::Text(text) => {
-                let payload = match serde_json::from_str::<ChatMessage>(&text) {
+                let payload = match serde_json::from_str::<WsMessage>(&text) {
                     Ok(chat) => serde_json::to_string(&chat).unwrap(),
-                    Err(_) => serde_json::to_string(&ChatMessage {
+                    Err(_) => serde_json::to_string(&WsMessage {
                         user: "anon".to_string(),
                         step: None,
                     })
