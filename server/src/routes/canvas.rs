@@ -1,36 +1,44 @@
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use std::sync::{Arc, Mutex};
+
 use axum::extract::State;
-use axum::{routing::get, Router};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::{Router, routing::get};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 struct Step {
     id: i32,
     coords: [i32; 2],
     color: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 struct WsMessage {
     user: String,
     step: Option<Step>,
 }
 
-pub fn router(tx: tokio::sync::broadcast::Sender<String>) -> Router {
+type WsMessages = Arc<Mutex<Vec<WsMessage>>>;
+
+pub fn router(tx: broadcast::Sender<String>) -> Router {
+    let messages: WsMessages = Arc::new(Mutex::new(Vec::new()));
+
+    // Provide both tx and shared messages via a tuple
     Router::new()
         .route("/ws/canvas", get(ws_handler))
-        .with_state(tx)
+        .with_state((tx, messages))
 }
 
 async fn ws_handler(
-    State(tx): State<tokio::sync::broadcast::Sender<String>>,
+    State((tx, messages)): State<(broadcast::Sender<String>, WsMessages)>,
     ws: WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, tx))
+    ws.on_upgrade(move |socket| handle_socket(socket, tx, messages))
 }
 
-async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<String>) {
+async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, messages: WsMessages) {
     let (mut sender, mut receiver) = socket.split();
     let mut rx = tx.subscribe();
 
@@ -45,15 +53,29 @@ async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<Str
     while let Some(Ok(msg)) = receiver.next().await {
         match msg {
             Message::Text(text) => {
-                let payload = match serde_json::from_str::<WsMessage>(&text) {
-                    Ok(chat) => serde_json::to_string(&chat).unwrap(),
-                    Err(_) => serde_json::to_string(&WsMessage {
+                let parsed = match serde_json::from_str::<WsMessage>(&text) {
+                    Ok(msg) => Some(msg),
+                    Err(_) => None,
+                };
+
+                if let Some(msg) = parsed {
+                    {
+                        let mut guard = messages.lock().unwrap();
+                        guard.push(WsMessage {
+                            user: msg.user.clone(),
+                            step: msg.step.clone(),
+                        });
+                    }
+                    let payload = serde_json::to_string(&msg).unwrap();
+                    let _ = tx.send(payload);
+                } else {
+                    let fallback = WsMessage {
                         user: "anon".to_string(),
                         step: None,
-                    })
-                    .unwrap(),
-                };
-                let _ = tx.send(payload);
+                    };
+                    let payload = serde_json::to_string(&fallback).unwrap();
+                    let _ = tx.send(payload);
+                }
             }
             Message::Binary(_) => {}
             Message::Ping(_) => {}
@@ -64,5 +86,3 @@ async fn handle_socket(socket: WebSocket, tx: tokio::sync::broadcast::Sender<Str
 
     send_task.abort();
 }
-
-
