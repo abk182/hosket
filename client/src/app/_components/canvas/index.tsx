@@ -124,44 +124,53 @@ export default function Canvas({ username }: { username: string }) {
   };
 
   useEffect(() => {
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    const fn = async () => {
+      const data = await (
+        await fetch("http://localhost:3001/canvas/messages")
+      ).json();
+      console.log(data);
 
-    ws.onopen = () => {
-      setConnected(true);
-    };
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onmessage = (ev) => {
-      try {
-        const data: WsMessage = JSON.parse(ev.data);
+      ws.onopen = () => {
+        setConnected(true);
+      };
 
-        if (username === data.user || data.step == null) return;
+      ws.onmessage = (ev) => {
+        try {
+          const data: WsMessage = JSON.parse(ev.data);
 
-        if (!inputRef.current[data.user]) {
-          inputRef.current[data.user] = [];
+          if (username === data.user || data.step == null) return;
+
+          if (!inputRef.current[data.user]) {
+            inputRef.current[data.user] = [];
+          }
+
+          const lastStep =
+            inputRef.current[data.user][inputRef.current[data.user].length - 1];
+
+          if (lastStep?.id != null && data.step.id === lastStep.id) {
+            lastStep.coords.push(data.step.coords[0], data.step.coords[1]);
+          } else {
+            inputRef.current[data.user].push(data.step);
+          }
+
+          draw();
+        } catch (e) {
+          console.error(e);
         }
+      };
 
-        const lastStep =
-          inputRef.current[data.user][inputRef.current[data.user].length - 1];
-
-        if (lastStep?.id != null && data.step.id === lastStep.id) {
-          lastStep.coords.push(data.step.coords[0], data.step.coords[1]);
-        } else {
-          inputRef.current[data.user].push(data.step);
-        }
-
-        draw();
-      } catch (e) {
-        console.error(e);
-      }
+      ws.onclose = () => {
+        setConnected(false);
+      };
     };
 
-    ws.onclose = () => {
-      setConnected(false);
-    };
+    fn();
 
     return () => {
-      ws.close();
+      wsRef.current?.close();
     };
   }, [wsUrl, username]);
 

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{Router, routing::get};
+use axum::{Router, routing::get, Json};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -28,6 +28,7 @@ pub fn router(tx: broadcast::Sender<String>) -> Router {
     // Provide both tx and shared messages via a tuple
     Router::new()
         .route("/ws/canvas", get(ws_handler))
+        .route("/canvas/messages", get(get_messages))
         .with_state((tx, messages))
 }
 
@@ -85,4 +86,14 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, message
     }
 
     send_task.abort();
+}
+
+async fn get_messages(
+    State((_, messages)): State<(broadcast::Sender<String>, WsMessages)>,
+) -> Json<Vec<WsMessage>> {
+    let snapshot = {
+        let guard = messages.lock().unwrap();
+        guard.clone()
+    };
+    Json(snapshot)
 }
