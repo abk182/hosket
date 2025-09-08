@@ -128,7 +128,8 @@ export default function Canvas({ username }: { username: string }) {
       const data = await (
         await fetch("http://localhost:3001/canvas/messages")
       ).json();
-      console.log(data);
+      inputRef.current = data;
+      draw();
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

@@ -1,16 +1,19 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::{Router, routing::get, Json};
+use axum::{Json, Router, routing::get};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+use std::collections::hash_map::Entry::Occupied;
+use std::collections::hash_map::Entry::Vacant;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Step {
     id: i32,
-    coords: [i32; 2],
+    coords: Vec<i32>,
     color: String,
 }
 
@@ -90,10 +93,35 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, message
 
 async fn get_messages(
     State((_, messages)): State<(broadcast::Sender<String>, WsMessages)>,
-) -> Json<Vec<WsMessage>> {
+) -> Json<HashMap<String, Vec<Step>>> {
     let snapshot = {
         let guard = messages.lock().unwrap();
         guard.clone()
     };
-    Json(snapshot)
+
+    let mut grouped: HashMap<String, Vec<Step>> = HashMap::new();
+    for msg in snapshot.into_iter() {
+        if let Some(step) = msg.step {
+            grouped.entry(msg.user).or_default().push(step);
+        }
+    }
+
+    for steps in grouped.values_mut() {
+        let mut steps_map: HashMap<String, Step> = HashMap::new();
+        for step in std::mem::take(steps) {
+            match steps_map.entry(step.id.to_string()) {
+                Occupied(mut s) => {
+                    for coord in &step.coords {
+                        s.get_mut().coords.push(*coord);
+                    }
+                }
+                Vacant(_) => {
+                    steps_map.entry(step.id.to_string()).or_insert(step.clone());
+                }
+            }
+        }
+        steps.extend(steps_map.into_values());
+    }
+
+    Json(grouped)
 }
