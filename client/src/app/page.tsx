@@ -11,7 +11,7 @@ export default function Home() {
   );
   return (
     <div className={style.page}>
-      <Canvas username={username} />
+      <Canvas user={username} />
       <Chat username={username} onChangeUsername={setUsername} />
     </div>
   );

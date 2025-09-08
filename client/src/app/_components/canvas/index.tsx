@@ -7,15 +7,20 @@ import { getRandomHexColor } from "./hex";
 
 const wsUrl = getWsUrl("canvas");
 
-export default function Canvas({ username }: { username: string }) {
+type Step = {
+  user: string;
+  id: number;
+  coords: Array<number>;
+  color: string;
+};
+
+export default function Canvas({ user }: { user: string }) {
   const [connected, setConnected] = useState(false);
-  const [isDrawing, setIsDrawing] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const inputRef = useRef<{
-    [user: string]: Array<Step>;
-  }>({});
+  const stepsRef = useRef<Array<Step>>([]);
+  const drawingRef = useRef<boolean>(false);
 
   const drawStep = ({ coords, color }: Step) => {
     const canvas = canvasRef.current;
@@ -49,78 +54,61 @@ export default function Canvas({ username }: { username: string }) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    console.log(inputRef.current);
+    console.log(stepsRef.current);
 
-    Object.keys(inputRef.current).forEach((user) => {
-      inputRef.current[user].forEach((step) => {
-        drawStep(step);
-      });
+    stepsRef.current.forEach((step) => {
+      drawStep(step);
     });
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
+    drawingRef.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(e.clientX - rect.left);
     const y = Math.round(e.clientY - rect.top);
-    let id = 0;
-    let color = getRandomHexColor();
+    let id = stepsRef.current[stepsRef.current.length - 1]?.id;
 
-    if (inputRef.current[username] == null) {
-      inputRef.current[username] = [];
+    if (id == null) {
+      id = 0;
     } else {
-      const lastStep =
-        inputRef.current[username][inputRef.current[username].length - 1];
-
-      if (lastStep?.id != null) {
-        id = lastStep.id + 1;
-        color = lastStep.color;
-      }
+      id += 1;
     }
 
-    const newStep: Step = {
+    const newStep = {
+      user,
       id,
+      color: getRandomHexColor(),
       coords: [x, y],
-      color,
     };
-    inputRef.current[username].push(newStep);
-    draw();
 
-    const payload: WsMessage = {
-      user: username,
-      step: newStep,
-    };
-    wsRef.current?.send(JSON.stringify(payload));
+    stepsRef.current.push(newStep);
+
+    wsRef.current?.send(JSON.stringify(newStep));
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!drawingRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(e.clientX - rect.left);
     const y = Math.round(e.clientY - rect.top);
-    const lastStep =
-      inputRef.current[username][inputRef.current[username].length - 1];
+    const lastStep = stepsRef.current[stepsRef.current.length - 1];
     lastStep.coords.push(x, y);
-
-    const payload: WsMessage = {
-      user: username,
-      step: {
-        id: lastStep.id,
+    wsRef.current?.send(
+      JSON.stringify({
+        ...lastStep,
         coords: [x, y],
-        color: lastStep.color,
-      },
-    };
-    wsRef.current?.send(JSON.stringify(payload));
+      })
+    );
 
     draw();
   };
 
   const handleMouseUp = () => {
-    setIsDrawing(false);
+    drawingRef.current = false;
   };
 
   const handleMouseLeave = () => {
-    setIsDrawing(false);
+    drawingRef.current = false;
   };
 
   useEffect(() => {
@@ -128,7 +116,7 @@ export default function Canvas({ username }: { username: string }) {
       const data = await (
         await fetch("http://localhost:3001/canvas/messages")
       ).json();
-      inputRef.current = data;
+      stepsRef.current = data;
       draw();
 
       const ws = new WebSocket(wsUrl);
@@ -140,21 +128,16 @@ export default function Canvas({ username }: { username: string }) {
 
       ws.onmessage = (ev) => {
         try {
-          const data: WsMessage = JSON.parse(ev.data);
+          const data: Step = JSON.parse(ev.data);
 
-          if (username === data.user || data.step == null) return;
+          const currentStep = stepsRef.current.find(
+            (step) => step.id === data.id
+          );
 
-          if (!inputRef.current[data.user]) {
-            inputRef.current[data.user] = [];
-          }
-
-          const lastStep =
-            inputRef.current[data.user][inputRef.current[data.user].length - 1];
-
-          if (lastStep?.id != null && data.step.id === lastStep.id) {
-            lastStep.coords.push(data.step.coords[0], data.step.coords[1]);
+          if (currentStep) {
+            currentStep.coords.push(data.coords[0], data.coords[1]);
           } else {
-            inputRef.current[data.user].push(data.step);
+            stepsRef.current.push(data);
           }
 
           draw();
@@ -173,7 +156,7 @@ export default function Canvas({ username }: { username: string }) {
     return () => {
       wsRef.current?.close();
     };
-  }, [wsUrl, username]);
+  }, []);
 
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr_auto] gap-4 p-4 max-w-2xl mx-auto">

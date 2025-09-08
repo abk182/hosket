@@ -7,23 +7,16 @@ use axum::{Json, Router, routing::get};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
-use std::collections::hash_map::Entry::Occupied;
-use std::collections::hash_map::Entry::Vacant;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Step {
     id: i32,
+    user: String,
     coords: Vec<i32>,
     color: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-struct WsMessage {
-    user: String,
-    step: Option<Step>,
-}
-
-type WsMessages = Arc<Mutex<Vec<WsMessage>>>;
+type WsMessages = Arc<Mutex<Vec<Step>>>;
 
 pub fn router(tx: broadcast::Sender<String>) -> Router {
     let messages: WsMessages = Arc::new(Mutex::new(Vec::new()));
@@ -57,7 +50,7 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, message
     while let Some(Ok(msg)) = receiver.next().await {
         match msg {
             Message::Text(text) => {
-                let parsed = match serde_json::from_str::<WsMessage>(&text) {
+                let parsed = match serde_json::from_str::<Step>(&text) {
                     Ok(msg) => Some(msg),
                     Err(_) => None,
                 };
@@ -65,17 +58,16 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, message
                 if let Some(msg) = parsed {
                     {
                         let mut guard = messages.lock().unwrap();
-                        guard.push(WsMessage {
-                            user: msg.user.clone(),
-                            step: msg.step.clone(),
-                        });
+                        guard.push(msg.clone());
                     }
                     let payload = serde_json::to_string(&msg).unwrap();
                     let _ = tx.send(payload);
                 } else {
-                    let fallback = WsMessage {
+                    let fallback = Step {
+                        id: -1,
                         user: "anon".to_string(),
-                        step: None,
+                        coords: vec![],
+                        color: "red".to_string(),
                     };
                     let payload = serde_json::to_string(&fallback).unwrap();
                     let _ = tx.send(payload);
@@ -93,35 +85,26 @@ async fn handle_socket(socket: WebSocket, tx: broadcast::Sender<String>, message
 
 async fn get_messages(
     State((_, messages)): State<(broadcast::Sender<String>, WsMessages)>,
-) -> Json<HashMap<String, Vec<Step>>> {
+) -> Json<Vec<Step>> {
     let snapshot = {
         let guard = messages.lock().unwrap();
         guard.clone()
     };
 
-    let mut grouped: HashMap<String, Vec<Step>> = HashMap::new();
-    for msg in snapshot.into_iter() {
-        if let Some(step) = msg.step {
-            grouped.entry(msg.user).or_default().push(step);
-        }
-    }
+    let mut steps_map: HashMap<i32, Step> = HashMap::new();
 
-    for steps in grouped.values_mut() {
-        let mut steps_map: HashMap<String, Step> = HashMap::new();
-        for step in std::mem::take(steps) {
-            match steps_map.entry(step.id.to_string()) {
-                Occupied(mut s) => {
-                    for coord in &step.coords {
-                        s.get_mut().coords.push(*coord);
-                    }
-                }
-                Vacant(_) => {
-                    steps_map.entry(step.id.to_string()).or_insert(step.clone());
-                }
+    for step in snapshot {
+        match steps_map.get_mut(&step.id) {
+            Some(existing) => {
+                existing.coords.extend(step.coords);
+            }
+            None => {
+                steps_map.insert(step.id, step);
             }
         }
-        steps.extend(steps_map.into_values());
     }
 
-    Json(grouped)
+    let mut result: Vec<Step> = steps_map.into_values().collect();
+    result.sort_by_key(|s| s.id);
+    Json(result)
 }
