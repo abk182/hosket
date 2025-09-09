@@ -1,11 +1,9 @@
 "use client";
 
-import { getWsUrl } from "@/app/_utils/ws-url";
+import { getUrl } from "@/app/_utils/url";
 
 import { useEffect, useRef, useState } from "react";
 import { getRandomHexColor } from "./hex";
-
-const wsUrl = getWsUrl("canvas");
 
 type Step = {
   user: string;
@@ -114,12 +112,12 @@ export default function Canvas({ user }: { user: string }) {
   useEffect(() => {
     const fn = async () => {
       const data = await (
-        await fetch("http://localhost:3001/canvas/messages")
+        await fetch(getUrl('canvas/messages', 'http'))
       ).json();
       stepsRef.current = data;
       draw();
 
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket( getUrl("ws/canvas", 'ws'));
       wsRef.current = ws;
 
       ws.onopen = () => {

@@ -1,9 +1,9 @@
 "use client";
 
-import { getWsUrl } from "@/app/_utils/ws-url";
+import { getUrl } from "@/app/_utils/url";
 import { useEffect, useRef, useState } from "react";
 
-const wsUrl = getWsUrl("chat");
+const wsUrl = getUrl("ws/chat", 'ws');
 
 export default function Chat({
   username,
