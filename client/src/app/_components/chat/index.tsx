@@ -3,7 +3,7 @@
 import { getUrl } from "@/app/_utils/url";
 import { useEffect, useRef, useState } from "react";
 
-const wsUrl = getUrl("ws/chat", 'ws');
+const wsUrl = getUrl("chat", 'ws');
 
 export default function Chat({
   username,

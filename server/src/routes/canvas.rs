@@ -23,8 +23,8 @@ pub fn router(tx: broadcast::Sender<String>) -> Router {
 
     // Provide both tx and shared messages via a tuple
     Router::new()
-        .route("/ws/canvas", get(ws_handler))
-        .route("/canvas/messages", get(get_messages))
+        .route("/api/ws/canvas", get(ws_handler))
+        .route("/api/canvas/messages", get(get_messages))
         .with_state((tx, messages))
 }
 

@@ -3,9 +3,9 @@ export const getUrl = (route: string, protocol: 'ws' | 'http') => {
     typeof window !== "undefined" && window.location.protocol === "https:";
   const defaultHost =
     typeof window !== "undefined"
-      ? `${window.location.hostname}:3001`
-      : "localhost:3001";
+      ? `${window.location.hostname}:3000`
+      : "localhost:3000";
   const host = process.env.NEXT_PUBLIC_WS_HOST || defaultHost;
 
-  return `${isHttps ? `${protocol}s` : protocol}://${host}/${route}`;
+  return `${isHttps ? `${protocol}s` : protocol}://${host}/api${protocol === 'ws' ? '/ws' : ''}/${route}`;
 };

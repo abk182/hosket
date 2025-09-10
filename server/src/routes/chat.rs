@@ -12,7 +12,7 @@ struct WsMessage {
 
 pub fn router(tx: tokio::sync::broadcast::Sender<String>) -> Router {
     Router::new()
-        .route("/ws/chat", get(ws_handler))
+        .route("/api/ws/chat", get(ws_handler))
         .with_state(tx)
 }
 

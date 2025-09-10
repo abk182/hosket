@@ -117,7 +117,7 @@ export default function Canvas({ user }: { user: string }) {
       stepsRef.current = data;
       draw();
 
-      const ws = new WebSocket( getUrl("ws/canvas", 'ws'));
+      const ws = new WebSocket( getUrl("canvas", 'ws'));
       wsRef.current = ws;
 
       ws.onopen = () => {
